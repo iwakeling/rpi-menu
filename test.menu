@@ -1,0 +1,2 @@
+entry1=kcalc
+entry2=echo "hello" && read

@@ -2,36 +2,10 @@
 #include <SDL2/SDL_ttf.h>
 
 #include <istream>
+#include <memory>
 #include <vector>
 
-#include "opt-parse/opt-parse.h"
-
-static SDL_Color const white{0xFF, 0xFF, 0xFF};
-static SDL_Color const grey{0x80, 0x80, 0x80};
-
-class MenuEntry
-{
-public:
-  MenuEntry(SDL_Rect const& pos);
-  ~MenuEntry();
-
-  MenuEntry(MenuEntry const&) = delete;
-  MenuEntry& operator=(MenuEntry const&) = delete;
-
-  void setPos(int y);
-  void render(SDL_Renderer* renderer, TTF_Font* font);
-  void focus(bool hasFocus);
-  void act();
-
-private:
-  std::string title_;
-  std::vector<std::string> cmdLine_;
-  bool focussed_;
-  std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> texture_;
-  SDL_Rect pos_;
-
-  friend std::istream& operator>>(std::istream&, MenuEntry&);
-};
+class MenuEntry;
 
 class Menu
 {

@@ -33,8 +33,6 @@ void Buttons::loadConfig(std::istream& config)
 
   std::getline(config, baseDir_);
 
-  std::ofstream exp(baseDir_ + "/export");
-
   while( config )
   {
     std::string function;
@@ -42,7 +40,27 @@ void Buttons::loadConfig(std::istream& config)
     std::getline(config, function, '=');
     std::getline(config, pin);
 
-    exp << pin << std::endl;
+    if( !pin.empty() )
+    {
+      buttons_[pin] = std::make_pair(function, 0);
+    }
+  }
+
+  start();
+}
+
+void Buttons::start()
+{
+  std::ofstream exp(baseDir_ + "/export");
+  for( auto& button: buttons_ )
+  {
+    exp << button.first << std::endl;
+  }
+  exp.close();
+
+  for( auto& button: buttons_ )
+  {
+    std::string const& pin = button.first;
 
     std::ofstream directn(baseDir_ + "/gpio" + pin + "/direction");
     directn << "in" << std::endl;
@@ -65,7 +83,7 @@ void Buttons::loadConfig(std::istream& config)
       // clear any initial interrupt
       char c;
       read(fd, &c, 1);
-      buttonMap_[fd] = std::make_pair(function, pin);
+      button.second.second = fd;
     }
   }
 
@@ -77,8 +95,8 @@ void Buttons::loadConfig(std::istream& config)
   }
   else
   {
-    // start a background thread to run a poll loop
-    pollThreadDone_ = std::async(
+    // start an asynchronous poll loop
+    pollingStopped_ = std::async(
       std::launch::async,
       [this]{pollButtons();});
   }
@@ -90,17 +108,17 @@ void Buttons::stop()
   {
     // poke poll thread to stop
     write(pipe_[0], "0", 1);
-    pollThreadDone_.wait();
+    pollingStopped_.wait();
     close(pipe_[0]);
     close(pipe_[1]);
     pipe_[0] = -1;
 
     // close fds and unexport pins
     std::ofstream unexp(baseDir_ + "/unexport");
-    for( auto& button: buttonMap_ )
+    for( auto& button: buttons_ )
     {
-      close(button.first);
-      unexp << button.second.second << std::endl;
+      close(button.second.second);
+      unexp << button.first << std::endl;
     }
   }
 }
@@ -108,14 +126,14 @@ void Buttons::stop()
 void Buttons::pollButtons()
 {
   bool quit = false;
-  std::vector<struct pollfd> fds(buttonMap_.size() + 1);
+  std::vector<struct pollfd> fds(buttons_.size() + 1);
   fds[0].fd = pipe_[1];
   fds[0].events = POLLIN;
 
   size_t count = 1;
-  for( auto& button: buttonMap_ )
+  for( auto& button: buttons_ )
   {
-    fds[count].fd = button.first;
+    fds[count].fd = button.second.second;
     fds[count].events = POLLPRI | POLLERR;
     count++;
   }
@@ -130,12 +148,12 @@ void Buttons::pollButtons()
     else
     {
       size_t i = 1;
-      for( auto& button: buttonMap_ )
+      for( auto& button: buttons_ )
       {
         if( (fds[i].revents & POLLPRI) != 0 )
         {
           char c;
-	  lseek(fds[i].fd, 0, SEEK_SET);
+          lseek(fds[i].fd, 0, SEEK_SET);
           read(fds[i].fd, &c, 1);
           handler_(button.second.first);
         }

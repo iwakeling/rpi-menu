@@ -1,84 +1,112 @@
 #include "menu.h"
 
-#include <unistd.h>
 //#include <fontconfig/fontconfig.h>
+#include <iostream>
+#include <unistd.h>
+#include <wait.h>
 
-MenuEntry::MenuEntry(SDL_Rect const& pos)
+static SDL_Color const white{0xFF, 0xFF, 0xFF};
+static SDL_Color const grey{0x80, 0x80, 0x80};
+
+class MenuEntry
+{
+public:
+  MenuEntry(SDL_Rect const& pos)
   : focussed_(false),
     texture_(nullptr, SDL_DestroyTexture),
     pos_(pos)
-{
-}
-
-MenuEntry::~MenuEntry()
-{
-}
-
-void MenuEntry::setPos(int y)
-{
-  pos_.y = y;
-}
-
-void MenuEntry::render(SDL_Renderer* renderer, TTF_Font* font)
-{
-  if( !texture_ && font != nullptr)
   {
-    auto surface = TTF_RenderUTF8_Blended(font, title_.c_str(), white);
-    if( surface == nullptr )
+  }
+
+  MenuEntry(MenuEntry const&) = delete;
+  MenuEntry& operator=(MenuEntry const&) = delete;
+
+  void setPos(int y){ pos_.y = y; }
+  void focus(bool hasFocus){ focussed_ = hasFocus; }
+
+  void render(SDL_Renderer* renderer, TTF_Font* font)
+  {
+    if( (!texture_ || renderer != prevRenderer_) && font != nullptr)
     {
-      std::cerr << "Failed to create text surface: " << TTF_GetError() << std::endl;
+      auto surface = TTF_RenderUTF8_Blended(font, title_.c_str(), white);
+      if( surface == nullptr )
+      {
+        std::cerr << "Failed to create text surface: " << TTF_GetError() << std::endl;
+      }
+      else
+      {
+        TTF_SizeUTF8(font, title_.c_str(), &pos_.w, &pos_.h);
+        prevRenderer_ = renderer;
+        texture_.reset(
+          SDL_CreateTextureFromSurface(renderer, surface));
+        SDL_FreeSurface(surface);
+      }
+    }
+
+    if( texture_ )
+    {
+      SDL_RenderCopy(renderer, texture_.get(), nullptr, &pos_);
+    }
+
+    if( focussed_ )
+    {
+      auto uPos = pos_.y + TTF_FontAscent(font);
+      SDL_RenderDrawLine(
+        renderer,
+        pos_.x,
+        uPos,
+        pos_.x + pos_.w,
+        uPos);
+    }
+  }
+
+  void act()
+  {
+    pid_t cpid = fork();
+
+    if( cpid < 0 )
+    {
+      perror("Failed to fork");
+    }
+    else if( cpid == 0 )
+    {
+      std::vector<char*> args(cmdLine_.size() + 1);
+      for( size_t i = 0; i < cmdLine_.size(); i++ )
+      {
+        args[i] = &cmdLine_[i][0];
+      }
+      args[cmdLine_.size()] = nullptr;
+
+      execvp(cmdLine_[0].c_str(), args.data());
+      perror("Failed to exec");
     }
     else
     {
-      TTF_SizeUTF8(font, title_.c_str(), &pos_.w, &pos_.h);
-      texture_.reset(
-        SDL_CreateTextureFromSurface(renderer, surface));
+      // wait for sub-program to exit
+      int status = 0;
+      int result = 0;
+      do
+      {
+        status = waitpid(cpid, &result, 0);
+        if( status == -1 && errno == EINTR )
+        {
+          status = 0;
+          result = 0;
+        }
+      } while( status == 0 && !WIFEXITED(result) && !WIFSIGNALED(result) );
     }
   }
 
-  if( texture_ )
-  {
-    SDL_RenderCopy(renderer, texture_.get(), nullptr, &pos_);
-  }
+private:
+  std::string title_;
+  std::vector<std::string> cmdLine_;
+  bool focussed_;
+  SDL_Renderer* prevRenderer_; // to detect changes
+  std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> texture_;
+  SDL_Rect pos_;
 
-  if( focussed_ )
-  {
-    auto uPos = pos_.y + TTF_FontAscent(font);
-    SDL_RenderDrawLine(
-      renderer,
-      pos_.x,
-      uPos,
-      pos_.x + pos_.w,
-      uPos);
-  }
-}
-
-void MenuEntry::focus(bool hasFocus)
-{
-  focussed_ = hasFocus;
-}
-
-void MenuEntry::act()
-{
-  pid_t cpid = fork();
-
-  if( cpid < 0 )
-  {
-    perror("Failed to fork");
-  }
-  else if( cpid == 0 )
-  {
-    std::vector<char*> args(cmdLine_.size() + 1);
-    for( size_t i = 0; i < cmdLine_.size(); i++ )
-    {
-      args[i] = &cmdLine_[i][0];
-    }
-    args[cmdLine_.size()] = nullptr;
-
-    execvp(cmdLine_[0].c_str(), args.data());
-    perror("Failed to exec");
-  }
-}
+  friend std::istream& operator>>(std::istream&, MenuEntry&);
+};
 
 std::istream& operator>>(std::istream& is, MenuEntry& me)
 {
@@ -109,6 +137,10 @@ Menu::Menu(int width, int height)
    topIndex_(0)
 {
   font_.reset(TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24));
+  if( !font_ )
+  {
+    font_.reset(TTF_OpenFont("/usr/share/fonts/TTF/DejaVuSans.ttf", 24));
+  }
   if( !font_ )
   {
     std::cerr << "Failed to open font: " << TTF_GetError() << std::endl;

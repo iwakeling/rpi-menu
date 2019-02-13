@@ -3,6 +3,7 @@
 SDL_LIBS := `pkg-config --libs SDL2_ttf`
 GMOCK_LIBS := `pkg-config --libs gmock` -lgmock
 GTEST_LIBS := `pkg-config --libs gtest`
+FONTCONFIG_LIBS := `pkg-config --libs fontconfig`
 BINARIES :=
 UNITTESTS :=
 HELPFRAGMENTS :=
@@ -102,7 +103,7 @@ endef
 $(call cmd_template, \
 				rpi_menu, \
 				main.cpp menu.cpp buttons.cpp, \
-				$(SDL_LIBS))
+				$(SDL_LIBS) $(FONTCONFIG_LIBS))
 
 help:
 	@echo "make [DEBUG=1] [target]"

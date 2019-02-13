@@ -10,7 +10,7 @@ class MenuEntry;
 class Menu
 {
 public:
-  Menu(int width, int height);
+  Menu(std::string fontName, int width, int height);
   ~Menu();
 
   Menu(Menu const&) = delete;
@@ -26,6 +26,7 @@ private:
   void moveFocus(size_t idx);
 
 private:
+  std::string fontName_;
   int width_;
   int height_;
   std::unique_ptr<TTF_Font, decltype(&TTF_CloseFont)> font_;

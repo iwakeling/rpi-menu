@@ -1,6 +1,6 @@
 #include "menu.h"
 
-//#include <fontconfig/fontconfig.h>
+#include <fontconfig/fontconfig.h>
 #include <iostream>
 #include <unistd.h>
 #include <wait.h>
@@ -129,21 +129,44 @@ std::istream& operator>>(std::istream& is, MenuEntry& me)
   return is;
 }
 
-Menu::Menu(int width, int height)
-  :width_(width),
-   height_(height),
-   font_(nullptr, TTF_CloseFont),
-   focusIndex_(0),
-   topIndex_(0)
+std::string GetFontFile(std::string const& fontName)
 {
-  font_.reset(TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24));
-  if( !font_ )
+  std::string fontFile;
+  auto config = FcInitLoadConfigAndFonts();
+  auto pat = FcNameParse(reinterpret_cast<FcChar8 const*>(fontName.c_str()));
+  FcConfigSubstitute(config, pat, FcMatchPattern);
+  FcDefaultSubstitute(pat);
+
+  auto result = FcResultNoMatch;
+  auto font = FcFontMatch(config, pat, &result);
+  if( result == FcResultMatch && font != nullptr )
   {
-    font_.reset(TTF_OpenFont("/usr/share/fonts/TTF/DejaVuSans.ttf", 24));
+    FcChar8* fileName = NULL;
+    if( FcPatternGetString(font, FC_FILE, 0, &fileName) == FcResultMatch )
+    {
+      fontFile = reinterpret_cast<char const*>(fileName);
+    }
+    FcPatternDestroy(font);
   }
+  FcPatternDestroy(pat);
+  return fontFile;
+}
+
+Menu::Menu(std::string fontName, int width, int height)
+  : fontName_(std::move(fontName)),
+    width_(width),
+    height_(height),
+    font_(nullptr, TTF_CloseFont),
+    focusIndex_(0),
+    topIndex_(0)
+{
+  std::string fontFile(GetFontFile(fontName_));
+  font_.reset(TTF_OpenFont(fontFile.c_str(), 24));
   if( !font_ )
   {
-    std::cerr << "Failed to open font: " << TTF_GetError() << std::endl;
+    std::cerr <<
+      "Failed to open font " <<
+      fontFile << ": " << TTF_GetError() << std::endl;
   }
 }
 

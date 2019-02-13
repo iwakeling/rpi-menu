@@ -121,6 +121,7 @@ int main(int argc, char** argv)
   int requestedHeight = 0;
   std::string menuFileName;
   std::string buttonFileName;
+  std::string fontName;
 
   if( !Opt::parseCmdLine(argc, argv, {
         Opt(
@@ -136,6 +137,13 @@ int main(int argc, char** argv)
           [&buttonFileName](std::cmatch const& m)
           {
             buttonFileName = m[1];
+          }),
+        Opt(
+          "--font=(.*)",
+          "Name of font, defaults to DejaVuSans",
+          [&fontName](std::cmatch const& m)
+          {
+            fontName = m[1];
           }),
         Opt(
           "--screen=([0-9]+)x([0-9]+)",
@@ -209,7 +217,7 @@ int main(int argc, char** argv)
   try
   {
     Display display(requestedWidth, requestedHeight);
-    Menu menu(display.width(), display.height());
+    Menu menu(std::move(fontName), display.width(), display.height());
     std::ifstream menuFile(menuFileName);
     if( menuFile.is_open() )
     {

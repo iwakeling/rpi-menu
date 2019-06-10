@@ -1,5 +1,6 @@
 #include "buttons.h"
 
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <fstream>
@@ -12,6 +13,16 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+using namespace std::chrono_literals;
+
+bool bounce_time_elapsed(
+  std::chrono::steady_clock::time_point refPoint,
+  std::chrono::steady_clock::time_point now)
+{
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+    now - refPoint) > 500ms;
+}
 
 Buttons::Buttons(Handler handler)
   : handler_(handler),
@@ -138,26 +149,57 @@ void Buttons::pollButtons()
     count++;
   }
 
+  auto last_read = std::chrono::steady_clock::now();
+  size_t last_idx = 0;
+  std::string last_action;
+
   while( !quit )
   {
-    poll(fds.data(), count, -1);
+    // wait up to half a second for something to change
+    poll(fds.data(), count, 500);
     if( (fds[0].revents & POLLIN) != 0 )
     {
       quit = true;
     }
     else
     {
+      auto now = std::chrono::steady_clock::now();
+
+      // find the first button that's been pressed
       size_t i = 1;
-      for( auto& button: buttons_ )
+      auto it = buttons_.begin();
+      while( it != buttons_.end() && (fds[i].revents & POLLPRI) == 0 )
       {
-        if( (fds[i].revents & POLLPRI) != 0 )
+        it++;
+        i++;
+      }
+
+      if( it != buttons_.end() )
+      {
+        // a new button was pressed
+        if( bounce_time_elapsed(last_read, now) ||
+            i != last_idx)
         {
           char c;
           lseek(fds[i].fd, 0, SEEK_SET);
           read(fds[i].fd, &c, 1);
-          handler_(button.second.first);
+          handler_(it->second.first);
+
+          last_read = now;
+          last_idx = i;
+          last_action = it->second.first;
         }
-        i++;
+      }
+      else if( last_idx > 0 )
+      {
+        // no button pressed, see if the previous one is still pressed
+        char c;
+        lseek(fds[last_idx].fd, 0, SEEK_SET);
+        read(fds[last_idx].fd, &c, 1);
+        if( c == '1' )
+        {
+          handler_(last_action);
+        }
       }
     }
   }

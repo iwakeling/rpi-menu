@@ -118,7 +118,7 @@ std::istream& operator>>(std::istream& is, MenuEntry& me)
   do
   {
     auto nend = cmdLine.find(' ', n);
-    me.cmdLine_.emplace_back(cmdLine.substr(n, nend));
+    me.cmdLine_.emplace_back(cmdLine.substr(n, nend - n));
     n = nend;
     if( n != std::string::npos )
     {

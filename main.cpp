@@ -246,12 +246,13 @@ int main(int argc, char** argv)
 
     bool quit = false;
     SDL_Event e;
+
+    menu.render(display);
+
     while( !quit && SDL_WaitEvent( &e ) != 0 )
     {
       SDL_SetRenderDrawColor(display, 0x00, 0x00, 0x00, 0xFF);
       SDL_RenderClear(display);
-
-      menu.render(display);
 
       Action action = Action::None;
       if( e.type == SDL_KEYDOWN &&
@@ -309,6 +310,7 @@ int main(int argc, char** argv)
       }
       }
 
+      menu.render(display);
       SDL_RenderPresent(display);
     }
 
